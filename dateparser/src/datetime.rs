@@ -1,3 +1,4 @@
+use std::fmt::format;
 use crate::timezone;
 use anyhow::{anyhow, Result};
 use chrono::prelude::*;
@@ -108,13 +109,14 @@ where
 
     fn chinese_ymd_family(&self, input: &str) -> Option<Result<DateTime<Utc>>> {
         lazy_static! {
-            static ref RE: Regex = Regex::new(r"^[0-9]{4}年[0-9]{2}月").unwrap();
+            static ref RE: Regex = Regex::new(r"^[0-9]{4}年[0-9]{1,2}月").unwrap();
         }
         if !RE.is_match(input) {
             return None;
         }
         self.chinese_ymd_hms(input)
             .or_else(|| self.chinese_ymd(input))
+            .or_else(|| self.chinese_ym(input))
     }
 
     // unix timestamp
@@ -737,7 +739,7 @@ where
     fn chinese_ymd_hms(&self, input: &str) -> Option<Result<DateTime<Utc>>> {
         lazy_static! {
             static ref RE: Regex =
-                Regex::new(r"^[0-9]{4}年[0-9]{2}月[0-9]{2}日[0-9]{2}时[0-9]{2}分[0-9]{2}秒$")
+                Regex::new(r"^[0-9]{4}年[0-9]{1,2}月[0-9]{1,2}日[0-9]{2}时[0-9]{2}分[0-9]{2}秒$")
                     .unwrap();
         }
         if !RE.is_match(input) {
@@ -755,11 +757,36 @@ where
     // - 2014年04月08日
     fn chinese_ymd(&self, input: &str) -> Option<Result<DateTime<Utc>>> {
         lazy_static! {
-            static ref RE: Regex = Regex::new(r"^[0-9]{4}年[0-9]{2}月[0-9]{2}日$").unwrap();
+            static ref RE: Regex = Regex::new(r"^[0-9]{4}年[0-9]{1,2}月[0-9]{1,2}日$").unwrap();
         }
         if !RE.is_match(input) {
             return None;
         }
+
+        let now = Utc::now()
+            .date()
+            .and_time(self.default_time)?
+            .with_timezone(self.tz);
+        NaiveDate::parse_from_str(input, "%Y年%m月%d日")
+            .ok()
+            .map(|parsed| parsed.and_time(now.time()))
+            .and_then(|datetime| self.tz.from_local_datetime(&datetime).single())
+            .map(|at_tz| at_tz.with_timezone(&Utc))
+            .map(Ok)
+    }
+
+    // chinese yyyy mm
+    // - 2014年04月
+    fn chinese_ym(&self, input: &str) -> Option<Result<DateTime<Utc>>> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r"^[0-9]{4}年[0-9]{1,2}月").unwrap();
+        }
+        if !RE.is_match(input) {
+            return None;
+        }
+
+        // 如果只匹配到月没有日的,追加01日
+        let input = &format!("{}01日", input.trim());
 
         let now = Utc::now()
             .date()
