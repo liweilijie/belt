@@ -36,6 +36,8 @@ where
             .or_else(|| self.dot_mdy_or_ymd(input))
             .or_else(|| self.mysql_log_timestamp(input))
             .or_else(|| self.chinese_ymd_family(input))
+            .or_else(|| self.special_ym_one(input))
+            .or_else(|| self.special_ym_two(input))
             .unwrap_or_else(|| Err(anyhow!("{} did not match any formats.", input)))
     }
 
@@ -117,6 +119,54 @@ where
         self.chinese_ymd_hms(input)
             .or_else(|| self.chinese_ymd(input))
             .or_else(|| self.chinese_ym(input))
+    }
+
+    // 匹配 yyyy/mm
+    fn special_ym_one(&self, input: &str) -> Option<Result<DateTime<Utc>>> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r"^[0-9]{4}/[0-9]{1,2}$").unwrap();
+        }
+        if !RE.is_match(input) {
+            return None;
+        }
+
+        // 如果只匹配到月没有日的,追加01日
+        let input = &format!("{}/01", input.trim());
+
+        let now = Utc::now()
+            .date()
+            .and_time(self.default_time)?
+            .with_timezone(self.tz);
+        NaiveDate::parse_from_str(input, "%Y/%m/%d")
+            .ok()
+            .map(|parsed| parsed.and_time(now.time()))
+            .and_then(|datetime| self.tz.from_local_datetime(&datetime).single())
+            .map(|at_tz| at_tz.with_timezone(&Utc))
+            .map(Ok)
+    }
+
+    // 匹配 yyyy-mm
+    fn special_ym_two(&self, input: &str) -> Option<Result<DateTime<Utc>>> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r"^[0-9]{4}-[0-9]{1,2}$").unwrap();
+        }
+        if !RE.is_match(input) {
+            return None;
+        }
+
+        // 如果只匹配到月没有日的,追加01日
+        let input = &format!("{}-01", input.trim());
+
+        let now = Utc::now()
+            .date()
+            .and_time(self.default_time)?
+            .with_timezone(self.tz);
+        NaiveDate::parse_from_str(input, "%Y-%m-%d")
+            .ok()
+            .map(|parsed| parsed.and_time(now.time()))
+            .and_then(|datetime| self.tz.from_local_datetime(&datetime).single())
+            .map(|at_tz| at_tz.with_timezone(&Utc))
+            .map(Ok)
     }
 
     // unix timestamp

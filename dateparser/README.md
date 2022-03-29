@@ -238,4 +238,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 "2014年04月08日11时25分18秒",
 // chinese yyyy mm dd
 "2014年04月08日",
+"2014年04月", // added by liw
+"2014-04"
 ```
